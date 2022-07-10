@@ -12,12 +12,11 @@ const prng = std.rand.DefaultPrng.init(blk: {
                         });
 const rand = prng.random();
 
-// 
-// inline fn int(self: Random, comptime T: type, max: anytype) anytype
-// {
-    // return rand.int(T, 0, max);
-// }
-
+inline fn next(r: Random, comptime T: type, max: anytype) anytype
+{
+    return Random.intRangeAtMost(r, T, 0, max);    
+}
+// fn intRangeAtMost(r: Random, comptime T: type, at_least: anytype, at_most: anytype) anytype
 
 /// It allocates on heap
 pub fn proportional(algorithm: *GeneticAlg) void
@@ -65,14 +64,6 @@ pub fn rouletteWheel(algorithm: *GeneticAlg) void
 
 pub const RouletteWheel = struct
 {
-    const prng = std.rand.DefaultPrng.init(blk: {
-                                   var seed: u64 = undefined;
-                                   try std.os.getrandom(std.mem.asBytes(&seed));
-                                   break :blk seed;
-                               });
-    const rand = prng.random();   
-
-
     pub fn runStep(algorithm: *GeneticAlg) void
     {
         var fitness = algorithm.population.fitness;

@@ -75,6 +75,50 @@ pub const IChromosome = struct
 };
 
 
+pub const IStep = struct
+{
+    ptr: *anyopaque,
+    runStep: fn(*anyopaque, algorithm: *GeneticAlg) !void,
+    deinit: fn(*anyopaque) void,
+    
+    const Self = @This();
+    
+    pub fn init(ptr: anytype) Self
+    {
+        const Ptr = @TypeOf(ptr);
+        const ptr_info = @typeInfo(Ptr);
+
+        if (ptr_info != .Pointer) @compileError("ptr must be a pointer");
+        if (ptr_info.Pointer.size != .One) @compileError("ptr must be a single item pointer");
+
+        const alignment = ptr_info.Pointer.alignment;
+        
+        const gen = struct
+        {
+            pub fn runStepImpl(pointer: *anyopaque) void
+            {
+                const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
+
+                return @call( .{ modifier = .always_inline}, ptr_info.Pointer.child.runStep, .{ self });
+            }
+            
+            pub fn deinitImpl(pointer: *anyopaque) void
+            {
+                const self = @ptrCast(Ptr, @alignCast(alignment, pointer));
+
+                return @call( .{ modifier = .always_inline}, ptr_info.Pointer.child.deinit, .{ self });
+            }
+        };
+        
+        return .{
+            .ptr = ptr,
+            .runStep = gen.runStepImpl,
+            .deinit = gen.deinitImpl,
+        };
+    }
+};
+
+
 
 
 pub fn Population(
@@ -143,24 +187,35 @@ pub fn Population(
                     }
                 }
             }
-        }
-
-        /// simply copies matingpool to population, no complex selecting
-        pub fn set(a: *Population, b: *Population) void
-        {
-            var population = a.population;
-            var generations = a.generations;
-            const matingpool = b.population;
-            const len = a.population.len;
-            
-            var i: usize = 0;
-            while(i < len) : (i += 1)
-            {
-                population[i] = matingpool[i];
-                generations[i] += 1;
-            } 
-        }
+        }        
     };    
+}
+
+const PopulationSet = struct
+{
+    pub fn runStep(self: PopulationSet, algorithm: *GeneticAlg) void
+    {
+        var population = algorithm.get_population();
+        var matingpool = algorithm.get_matingpool();
+        var generations = algorithm.population.generations();
+        
+        var i: usize = 0;
+        while(i < population.len) : (i += 1)
+        {
+            population[i] = matingpool[i];
+            generation[i] += 1;
+        }
+    }
+    
+    pub fn deinit() void
+    {
+    
+    }
+    
+    pub fn step(self: *PopulationSet) IStep
+    {
+        return IStep.init(self);
+    }
 }
 
 
@@ -174,9 +229,7 @@ pub fn GenetigAlg(
     {
         population: Population(T),
         matingpool: Population(T),
-        steps: []fn(*GenetigAlg, param: anytype) !void = undefined,
-        buffer: []u8 = undefined,                                       // holds parameters for steps
-        params: []anytype,
+        steps: []*IStep,
         converged: bool = false,
         const Self = @This();
 
@@ -190,13 +243,21 @@ pub fn GenetigAlg(
             return self.matingpool.population;
         }
 
+        pub fn deinit(self: *Self) void
+        {
+            for(steps) |step|
+            {
+                step.deinit();
+            }             
+        }
+
         pub fn run(self: *GenetigAlg) !void
         {
             while(!self.converged)
             {
-                for(steps) |step, i|
+                for(steps) |step|
                 {
-                    try step(self, params[i]);
+                    try step.runStep(self);
                 }
             }
         }        
@@ -217,32 +278,25 @@ test "GeneticAlg"
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     var arena = std.heap.ArenaAllocator.init(fba.allocator());
     defer arena.deinit();
-    const arena_allocator = arena.allocator(); 
+    const _arena = arena.allocator(); 
      
-    const steps = [_]fn(*GeneticAlg, anytype) !void
+    const steps = [_]IStep
     {
-        Experiment.fitness,
-        Selection.proportional,
-        Crossover.onePoint,
-        Mutation.scrable,
-        Population.set,
-        Termination.maxGeneration,        
+        _arena.create(IStep, FitnessWSGA{}.step()),     // ??? 
+        _arena.create(IStep, Selection.Proportional.init(allocator).step()),
+        _arena.create(IStep, Crossover.OnePoint.step()),
+        _arena.create(IStep, Mutation.Scrable.init(allocator).step()),
+        _arena.create(IStep, PopulationSet{}.step()),
+        _arena.create(IStep, Termination.MaxGeneration{}.step()),        
     };
-
-    const params = [_]anytype
-    {
         
-    }
-
-    // ^ change into structs instead...
-
-    
     const geneticAlg = GeneticAlg
     {
         .population = population,
         .matingpool = matingpool,
         .steps = steps, 
     };
+    defer geneticAlg.deinit();
 
     try geneticAlg.run();
 }

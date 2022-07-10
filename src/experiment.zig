@@ -1,6 +1,14 @@
 const std = @import("std");
 const panic = std.debug.panic;
+const IStep = @import("GeneticAlg").IStep;
 
+var prng = std.rand.DefaultPrng.init(blk: {
+                        var seed: u64 = undefined;
+                        try std.os.getrandom(std.mem.asBytes(&seed));
+                        break :blk seed;
+                    });
+const rand = prng.random();                   
+              
 
 pub const Experiment = struct
 {
@@ -14,19 +22,6 @@ pub const Experiment = struct
     pub fn initialize(self: *Experiment) void
     {
         unreachable;
-
-        var prng = std.rand.DefaultPrng.init(blk: {
-                            var seed: u64 = undefined;
-                            try std.os.getrandom(std.mem.asBytes(&seed));
-                            break :blk seed;
-                        });
-            const rand = prng.random();
-            const chromosomes = population.population; 
-                    
-            for(chromosomes) |chromosome|
-            {
-                chromosome.randomInit(rand);
-            }     
     }
 
     pub fn fitness(self: *Experiment) f32
@@ -57,3 +52,28 @@ pub const Experiment = struct
     }   
 };
 
+
+pub const FitnessWSGA = struct
+{
+    pub fn runStep(self: FitnessWSGA, algorithm: *GeneticAlg) void
+    {
+        var population = algorithm.get_population();
+        var fitness = algorithm.population.fitness;
+        
+        var i: usize = 0;
+        while(i < fitness) : (i += 1)
+        {
+            fitness[i] = population[i].chromosome().fitness();
+        }
+    }
+    
+    pub fn deinit() void
+    {
+    
+    }
+    
+    pub fn step(self: *FitnessWSGA) IStep
+    {
+        return IStep.init(self);
+    }
+}
