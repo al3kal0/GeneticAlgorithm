@@ -25,7 +25,7 @@ pub MaxGeneration = struct
         
     pub fn deinit() void
     {
-    
+        return;
     }
     
     pub fn step(self: *MaxGeneration) IStep

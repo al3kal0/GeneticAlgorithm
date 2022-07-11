@@ -69,7 +69,7 @@ pub const FitnessWSGA = struct
     
     pub fn deinit() void
     {
-    
+        return;
     }
     
     pub fn step(self: *FitnessWSGA) IStep

@@ -1,6 +1,6 @@
 const std = @import("std");
 const GeneticAlg = @import("geneticAlg.zig");
-
+const Random = std.rand.Random;
 
 const prng = std.rand.DefaultPrng.init(blk: {
                             var seed: u64 = undefined;
@@ -9,91 +9,167 @@ const prng = std.rand.DefaultPrng.init(blk: {
                         });
 const rand = prng.random();
 
-
-inline fn bitflip_mutation(comptime T: type, chromosome: *T) void
+inline fn next(r: Random, comptime T: type, max: anytype) type
 {
-    const mutation = switch(rand.intRangeAtMost(u8, 0, 6))
-    {
-        0 => 0b000_0001,
-        1 => 0b000_0010,
-        2 => 0b000_0100,
-        3 => 0b000_1000,
-        4 => 0b001_0000,
-        5 => 0b010_0000,
-        6 => 0b100_0000,
-        else => 0b000_0000,
-    };
-
-    const offset = rand.intRangeAtMost(usize, @sizeOf(T) - @sizeOf(u8));
-    var ptr = @ptrCast([*]u8, chromosome)
-    ptr[offset].* ^= mutation;
-    ptr[offset].chromosome().repair();
+    return r.intRangeAtMost(T, 0, max);
 }
 
-pub fn bitflip(algorithm: *GeneticAlg) void
+
+pub const Bitflip = struct
 {
-    var population = algorithm.get_population();
+    mutationFactor: f32 = 0.1,
 
-    var i: usize = 0;
-    while(i < population.len) : (i += 1)
+    fn mutation(comptime T: type, chromosome: *T) void
     {
-        if(MutationFactor > rand.float(f32))
+        const _mutation = switch(rand.next(u8, 6))
         {
-            bitflip_mutation(&population[i])               
-        }        
-    }   
-}
+            0 => 0b000_0001,
+            1 => 0b000_0010,
+            2 => 0b000_0100,
+            3 => 0b000_1000,
+            4 => 0b001_0000,
+            5 => 0b010_0000,
+            6 => 0b100_0000,
+            else => 0b000_0000,
+        };
+    
+        const offset = rand.next(usize, @sizeOf(T) - @sizeOf(u8));
+        var ptr = @ptrCast([*]u8, chromosome);
+        ptr[offset] ^= _mutation;
+        ptr[offset].chromosome().repair();
+    }    
 
-pub fn random(algorithm: *GeneticAlg) void
+    pub fn runStep(self: *Bitflip, algorithm: *GeneticAlg) !void
+    {
+        var population = algorithm.get_population();
+        
+        var i: usize = 0;
+        while(i < population.len) : (i += 1)
+        {
+            if(self.mutationFactor > rand.float(f32))
+            {
+                mutation(population[i]);             
+            }        
+        }  
+    }
+
+    pub fn deinit(self: *Bitflip) void
+    {
+        return;
+    }
+
+    pub fn step(self: *Bitflip) IStep
+    {
+        return IStep.init(self);
+    }
+};
+
+pub const Random = struct
 {
-    const MutationFactor = 0.1;
-    var population = algorithm.get_population();
+    mutationFactor: f32 = 0.1,   
 
-    var i: usize = 0;
-    while(i < population.len) : (i += 1)
+    pub fn runStep(self: *Random, algorithm: *GeneticAlg) !void
     {
-        if(MutationFactor > rand.float(f32))
+        var population = algorithm.get_population();
+        
+        var i: usize = 0;
+        while(i < population.len) : (i += 1)
         {
-            population[i].chromosome().randomMutation();
+            if(self.mutationFactor > rand.float(f32))
+            {
+                population[i].chromosome().randomMutation();
+            }
+        }
+    }    
+
+    pub fn deinit(self: *Random) void
+    {
+        return;
+    }
+
+    pub fn step(self: *Random) IStep
+    {
+        return IStep.init(self);
+    }
+};
+
+pub const Scramble = struct
+{
+    mutationFactor: f32 = 0.5,
+    
+    const mutationSize = 12;
+
+    fn mutation(comptime T: type, chromosome: *T, offset: usize) void
+    {
+        var _ptr = @ptrCast([*]u8, chromosome) + offset;
+        var ptr = @ptrCast([*]u32, _ptr);
+    
+        ptr[0] ^= rand.int(u32);
+        ptr[1] ^= rand.int(u32);
+        ptr[2] ^= rand.int(u32);
+    
+        chromosome.chromosome().repair();
+    }
+
+    pub fn runStep(self: *Scramble, algorithm: *GeneticAlg)!void
+    {        
+        var population = algorithm.get_population();
+    
+        var i: usize = 0;
+        while(i < population.len) : (i += 1)
+        {
+            if(self.mutationFactor > rand.float(f32))
+            {
+                const offset = rand.next(usize, @sizeOf(T) - mutationSize);
+                mutation(population[i], offset);
+            }
         }
     }
-}
 
-fn scramble_mutation(comptime T: type, chromosome: *T, offset: usize) void
-{
-    var _ptr = @ptrCast([*]u8, chromosome) + offset;
-    var ptr = @ptrCast([*]u32, _ptr);
-
-    ptr[0] ^= rand.int(u32);
-    ptr[1] ^= rand.int(u32);
-    ptr[2] ^= rand.int(u32);
-
-    chromosome.chromosome().repair();
-}
-
-pub fn scramble(algorithm: *GeneticAlg) void
-{
-    const MutationFactor = 0.5;
-    const MutationSize = 12;
-    var population = algorithm.get_population();
-
-    var i: usize = 0;
-    while(i < population.len) : (i += 1)
+    pub fn deinit(self: *Scramble) void
     {
-        if(MutationFactor > rand.float(f32))
-        {
-            const offset = rand.intRangeAtMost(usize, 0, @sizeOf(T) - MutationSize);
-            scramble_mutation(&population[i], offset);
-        }
+        return;
     }
-}
 
-pub fn swap(algorithm: *GeneticAlg) void
-{
-    panic("not implemented yet\n", .{});
-}
+    pub fn step(self: *Scramble) IStep
+    {
+        return IStep.init(self);
+    }
+};
 
-pub fn inversion(algorithm: *GeneticAlg) void
+pub const Swap = struct
 {
-    panic("not implemented yet\n", .{});    
-}
+    pub fn runStep(self: *Swap, algorithm: *GeneticAlg) !void
+    {
+        unreachable;
+    }    
+
+    pub fn deinit(self: *Swap) void
+    {
+        return;
+    }
+
+    pub fn step(self: *Swap) IStep
+    {
+        return IStep.init(self);
+    }
+};
+
+
+pub const Inversion = struct
+{
+    pub fn runStep(self: *Inversion, algorithm: *GeneticAlg) !void
+    {
+        unreachable;
+    }    
+
+    pub fn deinit(self: *Inversion) void
+    {
+        return;
+    }
+
+    pub fn step(self: *Inversion) IStep
+    {
+        return IStep.init(self);
+    }
+};

@@ -209,7 +209,7 @@ const PopulationSet = struct
     
     pub fn deinit() void
     {
-    
+        return;
     }
     
     pub fn step(self: *PopulationSet) IStep
@@ -284,8 +284,8 @@ test "GeneticAlg"
     {
         _arena.create(IStep, FitnessWSGA{}.step()),     // ??? 
         _arena.create(IStep, Selection.Proportional.init(allocator).step()),
-        _arena.create(IStep, Crossover.OnePoint.step()),
-        _arena.create(IStep, Mutation.Scrable.init(allocator).step()),
+        _arena.create(IStep, Crossover.OnePoint{}.step()),
+        _arena.create(IStep, Mutation.Scramble{}.step()),
         _arena.create(IStep, PopulationSet{}.step()),
         _arena.create(IStep, Termination.MaxGeneration{}.step()),        
     };
