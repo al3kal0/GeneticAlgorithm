@@ -4,6 +4,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const Generic = @import("main.zig").Generic;
 
+// Runtime interface <-------
 
 pub fn Step(comptime T: type) type {
    
@@ -159,3 +160,73 @@ test "test interface" {
 }
 
 // end of file main.zig
+
+
+
+// -------------------------------------------------------------------------------------------
+
+
+
+// Comptime interface <---------
+
+pub fn Generic(comptime T: type) type {
+    return struct {
+        val0: T,
+        val1: T,
+        val2: T,
+    };
+}
+
+pub fn Initialization(
+    comptime T: type,
+    comptime Context: type,
+    comptime initFn: fn(*Context, *Generic(T)) void,
+) type {
+    return struct {
+        context: Context,
+        
+        const Self = @This();
+        
+        pub fn init(self: *Self, alg: *Generic(T)) void {
+            initFn(&self.context, alg);
+        }
+    };
+}
+
+pub const RandomInit = struct {
+    iteration: u32 = 0,
+    
+    const Self = @This();
+    pub const Init = Initialization(V, Self, initImpl);
+    
+    fn initImpl(self: *Self, generic: *Generic(V)) void {
+        self.iteration += 1;
+        generic.val0.v0 = 0.89;
+    }
+    
+    // copies context as a field to the interface
+    pub fn initialization(self: Self) Init {
+        return .{ .context = self };    
+    }
+};
+
+
+// target struct
+    const V = struct {
+        v0: f32,
+        v1: f32,
+        v2: f32,
+    };
+
+test "test interface" {
+    
+    var genv = Generic(V){ .val0 = undefined, .val1 = undefined, .val2 = undefined };
+    var rand_init = RandomInit{}; 
+    var interface = rand_init.initialization();
+    
+    interface.init(&genv);
+    try std.testing.expect(genv.val0.v0 == 0.89);
+    try std.testing.expect(interface.context.iteration == 1);
+}
+
+
